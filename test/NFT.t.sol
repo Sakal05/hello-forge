@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "src/NFT.sol";
+import "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
+
 
 contract NFTContract is Test {
     using stdStorage for StdStorage;
@@ -11,7 +13,10 @@ contract NFTContract is Test {
     NFT private nft;
 
     function setUp() public {
-        nft = new NFT("Token Tmey", "TT", "http://testopts.org", address(1));
+        // _disableInitializers();
+        nft = new NFT("Token Tmey", "TT", "http://testopts.org", address(this));
+        // console.log(address(1));
+        // console.log(address(this));
     }
 
     function test_RevertMintWithoutPrice() public {
@@ -46,19 +51,13 @@ contract NFTContract is Test {
 
     function test_BalanceIncrement() public {
         nft.mintNFT{value: 0.08 ether}(address(5));
-        uint256 ownerTokenSlot = stdstore
-            .target(address(nft))
-            .sig(nft.balanceOf.selector)
-            .with_key(address(5))
-            .find();
+        uint256 ownerTokenSlot = stdstore.target(address(nft)).sig(nft.balanceOf.selector).with_key(address(5)).find();
         uint256 numTokenFirst = uint256(vm.load(address(nft), bytes32(ownerTokenSlot)));
         assertEq(numTokenFirst, 1);
         // mint another token for address 5
         nft.mintNFT{value: 0.08 ether}(address(5));
         uint256 numTokenSecond = uint256(vm.load(address(nft), bytes32(ownerTokenSlot)));
         assertEq(numTokenSecond, 2);
-
-
     }
 
     function test_RevertTokenURINotOwner() public {
@@ -69,20 +68,46 @@ contract NFTContract is Test {
         vm.stopPrank();
     }
 
+    function test_SafeContractReceiver() public {
+        Receiver receiver = new Receiver();
+        nft.mintNFT{value: 0.08 ether}(address(receiver));
+        uint256 balanceReceiverSlot = stdstore
+            .target(address(nft))
+            .sig(nft.balanceOf.selector)
+            .with_key(address(address(receiver)))
+            .find();
+        uint256 balanceReceiver = uint256(vm.load(address(nft), bytes32(balanceReceiverSlot)));
+        assertEq(balanceReceiver, 1);
+    }
 
+    function test_RevertUnSafeConractReceiver() public {
+        vm.etch(address(123), bytes("mock up contract"));
+        vm.expectRevert(bytes(""));
+        nft.mintNFT{value: 0.08 ether}(address(address(123)));
+    }
 
-    // Contract c;
+    function test_WithDrawalSuccessAsOwner() public {
+    // Mint an NFT, sending eth to the contract
+        Receiver receiver = new Receiver();
+        address payable payee = payable(address(7));
+        uint256 priorPayeeBalance = payee.balance;
+        nft.mintNFT{value: nft.MINT_PRICE()}(address(receiver));
+        // Check that the balance of the contract is correct
+        assertEq(address(nft).balance, nft.MINT_PRICE());
+        uint256 nftBalance = address(nft).balance;
+        // Withdraw the balance and assert it was transferred
+        // console.log("owner of contract: ", );
+        nft.withDrawPayment(payee);
+        assertEq(payee.balance, priorPayeeBalance + nftBalance);
+    }
+}
 
-    // function setUp() public {
-    //     c = new Contract();
-    // }
-
-    // function testBar() public {
-    //     assertEq(uint256(1), uint256(1), "ok");
-    // }
-
-    // function testFoo(uint256 x) public {
-    //     vm.assume(x < type(uint128).max);
-    //     assertEq(x + x, x * 2);
-    // }
+contract Receiver is IERC721Receiver {
+    function onERC721Received(address operator, address from, uint256 id, bytes calldata data)
+        external
+        override
+        returns (bytes4)
+    {
+        return this.onERC721Received.selector;
+    }
 }

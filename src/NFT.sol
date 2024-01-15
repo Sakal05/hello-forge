@@ -17,7 +17,7 @@ contract NFT is ERC721, Ownable {
     uint256 public currentTokenId;
     uint256 public constant TOTAL_SUPPLY = 10_000;
     uint256 public constant MINT_PRICE = 0.08 ether;
-
+    
     constructor(string memory _name, string memory _symbol, string memory _baseURI, address _owner) ERC721(_name, _symbol) Ownable(_owner) {
         baseURI = _baseURI;
     }
